@@ -1,22 +1,21 @@
 # units are in meter kelvin second (m,kg,s)
 
-kappa_medium = 18.8 # W/m-K
+kappa_medium = 1 # W/m-K, 0.15-0.25, but since we have steel mesh inserted, it could be a little bit higher
 kappa_steel_T = '298.15 373.15 473.15 573.15 673.15 773.15 873.15 973.15 1023.15'
 kappa_steel = '14.1 15.4 16.8 18.3 19.7 21.2 22.4 23.9 24.6' # W/m-K
+kappa_quartz = 1.94 # W/m-K, 1.35-2.52
 kappa_insul = 0.4 # W/m-K
 
-rho_foam = 96 # kg/m^3
-rho_medium = '${fparse rho_foam*0.2+2050*0.8*0.7}' # kg/m^3, 80% porosity, 70% infiltration rate
+rho_sand = 1520 # kg/m^3
 rho_steel = 8030 # kg/m^3
+rho_medium = '${fparse rho_sand*0.95+rho_steel*0.05}' # kg/m^3, 5%-vol steel mesh
+rho_quartz = 2650 # kg/m^3
 rho_insul = 96 # kg/m^3
 
-cp_medium = 1074 # kg/m^3, 80% porosity, 70% infiltration rate
-cp_steel = 550 # kg/m^3
-cp_insul = 1130 # kg/m^3
-
-T_m = '${fparse 714+273.15}' # K, Melting point
-dT_pc = 8
-L = 3.739e5 # J/kg, Latent heat
+cp_medium = 310 # J/kg-K, 290 for sand, but since there is 5%-vol steel mesh, it could be a little bit higher
+cp_steel = 550 # J/kg-K
+cp_quartz = 750 # J/kg-K
+cp_insul = 1130 # J/kg-K
 
 htc = 1
 T_inf = 300
@@ -25,8 +24,9 @@ T0 = 300
 kB = 5.67e-8
 F = 0.6
 
-end_time = '${fparse 24*3600}' # 8 hrs
+end_time = '${fparse 24*3600}' # 24 hrs
 dt = 100
+dtmax = 500
 
 [GlobalParams]
   energy_densities = 'H'
@@ -78,17 +78,6 @@ dt = 100
     order = CONSTANT
     family = MONOMIAL
   []
-  [phase]
-    order = CONSTANT
-    family = MONOMIAL
-    block = 'medium'
-    [AuxKernel]
-      type = ADMaterialRealAux
-      property = phi
-      block = 'medium'
-      execute_on = 'INITIAL TIMESTEP_END'
-    []
-  []
 []
 
 [Kernels]
@@ -97,13 +86,6 @@ dt = 100
     variable = T
     density = rho
     specific_heat = cp
-  []
-  [energy_balance_local_latent]
-    type = EnergyBalanceTimeDerivative
-    variable = T
-    density = rho
-    specific_heat = cpL
-    block = 'medium'
   []
   [energy_balance_2]
     type = RankOneDivergence
@@ -139,7 +121,7 @@ dt = 100
     type = ADGenericConstantMaterial
     prop_names = 'rho cp'
     prop_values = '${rho_steel} ${cp_steel}'
-    block = 'pipe container'
+    block = 'pipe'
   []
   [steel_kappa]
     type = ADPiecewiseLinearInterpolationMaterial
@@ -147,11 +129,17 @@ dt = 100
     variable = 'T'
     x = ${kappa_steel_T}
     y = ${kappa_steel}
-    block = 'pipe container'
+    block = 'pipe'
+  []
+  [quartz]
+    type = ADGenericConstantMaterial
+    prop_names = 'rho cp kappa'
+    prop_values = '${rho_quartz} ${cp_quartz} ${kappa_quartz}'
+    block = 'container'
   []
   [medium]
     type = ADGenericConstantMaterial
-    prop_names = 'rho cp kappa0'
+    prop_names = 'rho cp kappa'
     prop_values = '${rho_medium} ${cp_medium} ${kappa_medium}'
     block = 'medium'
   []
@@ -171,24 +159,6 @@ dt = 100
     type = HeatFlux
     heat_flux = h
     temperature = T
-  []
-  # For melting and solidification
-  [phase_change]
-    type = TwoPhaseChange
-    latent_specific_heat = cpL
-    temperature = T
-    phase = phi
-    starting_temperature = ${T_m}
-    ending_temperature = '${fparse T_m+dT_pc}'
-    latent_heat = ${L}
-    block = 'medium'
-  []
-  [medium_kappa]
-    type = ADParsedMaterial
-    property_name = kappa
-    expression = '(cp + cpL) / cp * kappa0'
-    material_property_names = 'cp cpL kappa0'
-    block = 'medium'
   []
   # flux for BCs
   [qconv]
@@ -224,7 +194,7 @@ dt = 100
   reuse_preconditioner_max_linear_its = 25
 
   end_time = ${end_time}
-  dt = ${dt}
+  dtmax = ${dtmax}
   dtmin = 1e-6
   [TimeStepper]
     type = IterationAdaptiveDT
@@ -260,18 +230,6 @@ dt = 100
     block = 'medium'
     execute_on = 'INITIAL'
   []
-  [medium_molten]
-    type = ADElementIntegralMaterialProperty
-    mat_prop = phi
-    block = 'medium'
-    execute_on = 'INITIAL TIMESTEP_END'
-  []
-  [medium_molten_fraction]
-    type = ParsedPostprocessor
-    pp_names = 'medium_molten medium_volume'
-    function = 'medium_molten/medium_volume'
-    execute_on = 'INITIAL TIMESTEP_END'
-  []
   [medium_Tmax]
     type = NodalExtremeValue
     variable = T
@@ -293,27 +251,13 @@ dt = 100
     value = medium_S_rate
     execute_on = 'INITIAL TIMESTEP_END'
   []
-  [medium_L_rate]
-    type = EnthalpyRate
-    density = rho
-    specific_heat = cpL
-    temperature = T
-    block = 'medium'
-    execute_on = 'INITIAL TIMESTEP_END'
-    outputs = none
-  []
-  [medium_L]
-    type = TimeIntegratedPostprocessor
-    value = medium_L_rate
-    execute_on = 'INITIAL TIMESTEP_END'
-  []
 []
 
 [UserObjects]
   [kill]
     type = Terminator
-    expression = 'medium_molten_fraction>0.999'
-    message = '99.9% of PCM has molten.'
+    expression = 'medium_S>20*1e3*3600'
+    message = 'Stored 20 kWh of sensible heat.'
     execute_on = 'TIMESTEP_END'
   []
 []

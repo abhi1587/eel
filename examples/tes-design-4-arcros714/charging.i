@@ -121,14 +121,14 @@ dt = 100
   [convection]
     type = ADMatNeumannBC
     variable = T
-    boundary = 'insulation_outer pipe_outer pipe_inner'
+    boundary = 'insulation_outer'
     value = -1
     boundary_material = qconv
   []
   [radiation]
     type = ADMatNeumannBC
     variable = T
-    boundary = 'insulation_outer pipe_outer'
+    boundary = 'insulation_outer'
     value = -1
     boundary_material = qrad
   []
@@ -139,7 +139,7 @@ dt = 100
     type = ADGenericConstantMaterial
     prop_names = 'rho cp'
     prop_values = '${rho_steel} ${cp_steel}'
-    block = 'pipe container'
+    block = 'container'
   []
   [steel_kappa]
     type = ADPiecewiseLinearInterpolationMaterial
@@ -147,7 +147,7 @@ dt = 100
     variable = 'T'
     x = ${kappa_steel_T}
     y = ${kappa_steel}
-    block = 'pipe container'
+    block = 'container'
   []
   [medium]
     type = ADGenericConstantMaterial
@@ -198,7 +198,7 @@ dt = 100
     coupled_variables = 'T'
     constant_names = 'htc T_inf'
     constant_expressions = '${htc} ${T_inf}'
-    boundary = 'insulation_outer pipe_outer pipe_inner'
+    boundary = 'insulation_outer'
   []
   [qrad]
     type = ADParsedMaterial
@@ -207,7 +207,7 @@ dt = 100
     coupled_variables = 'T'
     constant_names = 'T_inf kB F'
     constant_expressions = '${T_inf} ${kB} ${F}'
-    boundary = 'insulation_outer pipe_outer'
+    boundary = 'insulation_outer'
   []
 []
 
@@ -248,10 +248,6 @@ dt = 100
 
   l_max_its = 100
   l_tol = 1e-06
-
-  [Quadrature]
-    order = CONSTANT
-  []
 []
 
 [Postprocessors]
